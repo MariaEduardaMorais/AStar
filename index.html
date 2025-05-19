@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Editor de Cenário</title>
+    <style>
+        body {
+            font-family: Arial;
+            background-color: #fef8f4;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 40px;
+        }
+        table {
+            border-collapse: collapse;
+        }
+        td {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #aaa;
+            text-align: center;
+            font-weight: bold;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .C { background-color: #add8e6; }
+        .S { background-color: #90ee90; }
+        .B { background-color: #444; color: white; }
+        .F { background-color: #ffd580; }
+        .A { background-color: #ffb6c1; }
+        .path { background-color: #d3a3ff; }
+        .controls {
+            margin-bottom: 20px;
+        }
+        select, button {
+            padding: 10px;
+            margin: 5px;
+            border-radius: 10px;
+            border: none;
+            font-weight: bold;
+        }
+        #resultado {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <label for="elemento">Escolher elemento:</label>
+    <select id="elemento">
+        <option value="_">Vazio (_)</option>
+        <option value="C">Início (C)</option>
+        <option value="S">Saída (S)</option>
+        <option value="B">Barreira (B)</option>
+        <option value="F">Fruta (F)</option>
+        <option value="A">Meia-barreira (A)</option>
+    </select>
+    <button onclick="resolverCaminho()">Resolver Caminho</button>
+</div>
+
+<table id="cenario"></table>
+
+<div id="resultado"></div>
+
+<script>
+const linhas = 6, colunas = 6;
+
+function criarTabela() {
+    const tabela = document.getElementById("cenario");
+    for (let i = 0; i < linhas; i++) {
+        const linha = tabela.insertRow();
+        for (let j = 0; j < colunas; j++) {
+            const celula = linha.insertCell();
+            celula.textContent = "_";
+            celula.dataset.linha = i;
+            celula.dataset.coluna = j;
+            celula.className = "_";
+            celula.onclick = () => selecionarCelula(celula);
+        }
+    }
+}
+
+function selecionarCelula(celula) {
+    const valor = document.getElementById("elemento").value;
+
+    // Garante apenas 1 C e 1 S
+    if (valor === 'C' || valor === 'S') {
+        removerAnterior(valor);
+    }
+
+    celula.textContent = valor;
+    celula.className = valor;
+}
+
+function removerAnterior(tipo) {
+    document.querySelectorAll("td").forEach(td => {
+        if (td.textContent === tipo) {
+            td.textContent = "_";
+            td.className = "_";
+        }
+    });
+}
+
+function resolverCaminho() {
+    const cenario = [];
+    for (let i = 0; i < linhas; i++) {
+        const linha = [];
+        for (let j = 0; j < colunas; j++) {
+            const celula = document.getElementById("cenario").rows[i].cells[j];
+            linha.push(celula.textContent);
+            celula.classList.remove("path");
+        }
+        cenario.push(linha);
+    }
+
+    fetch("http://127.0.0.1:5000/resolver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cenario })
+    })
+    .then(resp => resp.json())
+    .then(dados => {
+        if (dados.erro) {
+            document.getElementById("resultado").innerText = dados.erro;
+            return;
+        }
+
+        dados.caminho.forEach(([i, j]) => {
+            const celula = document.getElementById("cenario").rows[i].cells[j];
+            if (celula.textContent !== "C" && celula.textContent !== "S") {
+                celula.classList.add("path");
+            }
+        });
+
+        document.getElementById("resultado").innerText = 
+            `Caminho: ${dados.caminho.map(p => `(${p[0]},${p[1]})`).join(" -> ")}\nCusto: ${dados.custo}`;
+    })
+    .catch(() => {
+        document.getElementById("resultado").innerText = "Erro ao se comunicar com o servidor.";
+    });
+}
+
+criarTabela();
+</script>
+
+</body>
+</html>
