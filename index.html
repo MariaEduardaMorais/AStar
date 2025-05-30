@@ -2,143 +2,256 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Editor de Cenário</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Melhor Caminho | A*</title>
     <style>
         body {
-            font-family: Arial;
-            background-color: #fef8f4;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-top: 40px;
+            margin-top: 20px;
         }
+
+        h1 {
+            color: #e50914;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            background-color: #222;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        select, button {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            background-color: #333;
+            color: #fff;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button {
+            background-color: #e50914;
+            border: none;
+        }
+
+        button:hover {
+            background-color: #f6121d;
+        }
+        
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        /* Container é essencial para o posicionamento absoluto do personagem */
+        #cenario-container {
+            position: relative; 
+        }
+
         table {
             border-collapse: collapse;
         }
+
         td {
-            width: 40px;
-            height: 40px;
-            border: 1px solid #aaa;
+            width: 50px;
+            height: 50px;
+            border: 1px solid #444;
             text-align: center;
-            font-weight: bold;
-            font-size: 18px;
+            font-size: 28px;
             cursor: pointer;
+            background-color: #1f1f1f;
+            transition: background-color 0.3s;
+            /* Garante que a borda não aumente o tamanho da célula */
+            box-sizing: border-box; 
         }
-        .C { background-color: #add8e6; }
-        .S { background-color: #90ee90; }
-        .B { background-color: #444; color: white; }
-        .F { background-color: #ffd580; }
-        .A { background-color: #ffb6c1; }
-        .path { background-color: #d3a3ff; }
-        .controls {
-            margin-bottom: 20px;
+        
+        /* Personagem que será animado */
+        #character {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 50px;
+            height: 50px;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: transform 0.4s linear; 
+            pointer-events: none;
+            visibility: hidden;
         }
-        select, button {
-            padding: 10px;
-            margin: 5px;
-            border-radius: 10px;
-            border: none;
-            font-weight: bold;
-        }
+
+        .path { background-color: rgba(229, 9, 20, 0.4); }
+
         #resultado {
             margin-top: 20px;
+            font-size: 1.1em;
+            background-color: #222;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 50px;
+            width: 300px; /* Largura da tabela (6 col * 50px) */
+            text-align: center;
         }
     </style>
 </head>
 <body>
 
+<h1>Melhor Caminho: A*</h1>
+
 <div class="controls">
-    <label for="elemento">Escolher elemento:</label>
+    <label for="elemento">Adicionar:</label>
     <select id="elemento">
-        <option value="_">Vazio (_)</option>
         <option value="C">Início (C)</option>
         <option value="S">Saída (S)</option>
-        <option value="B">Barreira (B)</option>
         <option value="F">Fruta (F)</option>
-        <option value="A">Meia-barreira (A)</option>
+        <option value="B">Barreira (B)</option>
+        <option value="A">Água (A)</option>
     </select>
-    <button onclick="resolverCaminho()">Resolver Caminho</button>
+    <button id="solve-button" onclick="resolverCaminho()">Resolver</button>
 </div>
 
-<table id="cenario"></table>
+<div id="cenario-container">
+    <table id="cenario"></table>
+    <div id="character"></div>
+</div>
 
 <div id="resultado"></div>
 
 <script>
 const linhas = 6, colunas = 6;
 
+const elementoVisual = {
+    '_': '', 'C': '😀', 'S': '🏁', 'B': '🧱', 'F': '🍎', 'A': '💧'
+};
+
 function criarTabela() {
     const tabela = document.getElementById("cenario");
+    tabela.innerHTML = '';
     for (let i = 0; i < linhas; i++) {
         const linha = tabela.insertRow();
         for (let j = 0; j < colunas; j++) {
             const celula = linha.insertCell();
-            celula.textContent = "_";
-            celula.dataset.linha = i;
-            celula.dataset.coluna = j;
-            celula.className = "_";
+            celula.textContent = elementoVisual['_'];
+            celula.dataset.tipo = '_';
             celula.onclick = () => selecionarCelula(celula);
         }
     }
+    document.getElementById('resultado').innerHTML = '';
+    document.getElementById('solve-button').disabled = false;
+    const character = document.getElementById('character');
+    character.style.visibility = 'hidden';
 }
 
 function selecionarCelula(celula) {
     const valor = document.getElementById("elemento").value;
+    if (valor === 'C' || valor === 'S') removerAnterior(valor);
+    
+    celula.dataset.tipo = valor;
+    celula.textContent = elementoVisual[valor];
 
-    // Garante apenas 1 C e 1 S
-    if (valor === 'C' || valor === 'S') {
-        removerAnterior(valor);
+    if (valor === 'C') {
+        const character = document.getElementById('character');
+        character.innerHTML = elementoVisual['C'];
+        // **CORREÇÃO**: Posiciona o personagem usando as coordenadas reais da célula
+        character.style.transform = `translate(${celula.offsetLeft}px, ${celula.offsetTop}px)`;
     }
-
-    celula.textContent = valor;
-    celula.className = valor;
 }
 
 function removerAnterior(tipo) {
     document.querySelectorAll("td").forEach(td => {
-        if (td.textContent === tipo) {
-            td.textContent = "_";
-            td.className = "_";
+        if (td.dataset.tipo === tipo) {
+            td.dataset.tipo = "_";
+            td.textContent = elementoVisual['_'];
         }
     });
 }
 
+async function animarPercurso(caminho, cenario) {
+    const character = document.getElementById('character');
+    const solveButton = document.getElementById('solve-button');
+    const resultadoDiv = document.getElementById('resultado');
+    const tabela = document.getElementById("cenario");
+
+    solveButton.disabled = true;
+
+    const startNode = caminho[0];
+    const startCell = tabela.rows[startNode[0]].cells[startNode[1]];
+    startCell.textContent = '';
+    
+    character.style.visibility = 'visible';
+
+    const esperarAnimacao = () => new Promise(resolve => setTimeout(resolve, 400));
+
+    for (const [i, j] of caminho) {
+        const targetCell = tabela.rows[i].cells[j];
+        
+        // **CORREÇÃO**: Move o personagem usando as coordenadas reais da célula
+        character.style.transform = `translate(${targetCell.offsetLeft}px, ${targetCell.offsetTop}px)`;
+
+        if (targetCell.dataset.tipo === 'F') {
+            targetCell.textContent = '';
+            targetCell.dataset.tipo = '_';
+        }
+
+        if (cenario[i][j] !== 'C' && cenario[i][j] !== 'S') {
+           targetCell.classList.add('path');
+        }
+        
+        await esperarAnimacao();
+    }
+    
+    resultadoDiv.innerText += '\nAnimação concluída!';
+    solveButton.disabled = false;
+}
+
 function resolverCaminho() {
     const cenario = [];
+    const tabela = document.getElementById("cenario");
+    tabela.querySelectorAll('.path').forEach(cell => cell.classList.remove('path'));
+    
     for (let i = 0; i < linhas; i++) {
         const linha = [];
         for (let j = 0; j < colunas; j++) {
-            const celula = document.getElementById("cenario").rows[i].cells[j];
-            linha.push(celula.textContent);
-            celula.classList.remove("path");
+            linha.push(tabela.rows[i].cells[j].dataset.tipo);
         }
         cenario.push(linha);
     }
+    
+    const resultadoDiv = document.getElementById('resultado');
+    resultadoDiv.innerText = 'Calculando o melhor caminho...';
 
     fetch("http://127.0.0.1:5000/resolver", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cenario })
     })
-    .then(resp => resp.json())
+    .then(resp => resp.ok ? resp.json() : Promise.reject(`Erro do servidor: ${resp.status}`))
     .then(dados => {
-        if (dados.erro) {
-            document.getElementById("resultado").innerText = dados.erro;
+        if (dados.erro || !dados.caminho) {
+            resultadoDiv.innerText = dados.erro || dados.mensagem || "Não foi possível encontrar um caminho.";
             return;
         }
-
-        dados.caminho.forEach(([i, j]) => {
-            const celula = document.getElementById("cenario").rows[i].cells[j];
-            if (celula.textContent !== "C" && celula.textContent !== "S") {
-                celula.classList.add("path");
-            }
-        });
-
-        document.getElementById("resultado").innerText = 
-            `Caminho: ${dados.caminho.map(p => `(${p[0]},${p[1]})`).join(" -> ")}\nCusto: ${dados.custo}`;
+        resultadoDiv.innerText = `Custo total: ${dados.custo}`;
+        animarPercurso(dados.caminho, cenario);
     })
-    .catch(() => {
-        document.getElementById("resultado").innerText = "Erro ao se comunicar com o servidor.";
+    .catch((err) => {
+        resultadoDiv.innerText = "Erro: não foi possível conectar ao servidor. Verifique o console.";
+        console.error("Fetch Error:", err);
     });
 }
 
